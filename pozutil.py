@@ -66,7 +66,6 @@ def calc_rot_mat(roll_phi, pitch_theta, yaw_psi):
 
 
 class CameraHelper(object):
-
     def __init__(self):
         # TODO -- make it accept OpenCV intrinsic camera calib matrix
         # test params 640 by 480
@@ -74,13 +73,16 @@ class CameraHelper(object):
         self.cy = 240
         self.fx = 554  # 60 deg hfov (30.0)
         self.fy = 554  # 46 deg vfov (23.0)
+        self.camA = np.float32([[self.fx, 0., self.cx],
+                                [0., self.fy, self.cy],
+                                [0., 0., 1.]])
 
     def project_xyz_to_uv(self, xyz):
         """Project 3D world point to image plane.
-        :param xyz:
+        :param xyz: real world point, shape = (3,)
         """
-        pixel_u = self.fx * (xyz[0][0] / xyz[2][0]) + self.cx
-        pixel_v = self.fy * (xyz[1][0] / xyz[2][0]) + self.cy
+        pixel_u = self.fx * (xyz[0] / xyz[2]) + self.cx
+        pixel_v = self.fy * (xyz[1] / xyz[2]) + self.cy
         return pixel_u, pixel_v
 
     def calc_elev_azim(self, u, v):
@@ -95,9 +97,9 @@ class CameraHelper(object):
         ang_azimuth *= RAD2DEG
         return ang_elevation, ang_azimuth
 
-    def calc_range_to_landmark(self, xyz, u, v, cam_elev):
-        """Calculate range to known landmark.
-        :param xyz: landmark world coords, shape = (1,3)
+    def calc_rng_azi_to_landmark(self, xyz, u, v, cam_elev):
+        """Calculate range and azimuth to known landmark.
+        :param xyz: landmark world coords, shape = (3,)
         :param u: landmark horiz. pixel coord.
         :param v: landmark vert. pixel coord.
         :param cam_elev: camera elevation (radians)
@@ -106,14 +108,14 @@ class CameraHelper(object):
         # use camera params to convert (u, v) to normalized ray
         ray_x = (u - self.cx) / self.fx
         ray_y = (v - self.cy) / self.fy
-        ray_cam = np.array([[ray_x, ray_y, 1.]])
+        ray_cam = np.array([[ray_x], [ray_y], [1.]])
 
         # rotate ray to undo known camera elevation
         ro_mat_undo_ele = calc_rot_mat(-cam_elev, 0, 0)
-        ray_cam_unrot =  np.dot(ro_mat_undo_ele, np.transpose(ray_cam))
+        ray_cam_unrot = np.dot(ro_mat_undo_ele, ray_cam)
 
         # scale ray based on known height (Y) of landmark
-        rescale = xyz[0][1] / ray_cam_unrot[1][0]
+        rescale = xyz[1] / ray_cam_unrot[1][0]
         ray_cam_unrot_rescale = np.multiply(ray_cam_unrot, rescale)
 
         # calculate L2 norm to get distance to landmark
