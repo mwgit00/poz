@@ -45,9 +45,13 @@ def calc_rot_mat(roll_phi, pitch_theta, yaw_psi):
     return rpy
 
 
-def solve(a, b, gamma):
+def triangulate_calc_c(a, b, gamma):
     c_squ = (a * a + b * b - (2 * a * b * math.cos(gamma)))
-    return c_squ
+    return math.sqrt(c_squ)
+
+def triangulate_calc_gamma(a, b, c):
+    gamma_cos = (a * a + b * b - c *c) / (2 * a * b)
+    return math.acos(gamma_cos)
 
 
 # camera convention
@@ -93,8 +97,8 @@ class CameraHelper(object):
         :param u: horizontal pixel coordinate
         :param v: vertical pixel coordinate
         """
-        # need negation here so elevation matches convention listed above
         ang_azimuth = math.atan((u - self.cx) / self.fx)
+        # need negation here so elevation matches convention listed above
         ang_elevation = math.atan((self.cy - v) / self.fy)
         return ang_azimuth, ang_elevation,
 
@@ -107,9 +111,10 @@ class CameraHelper(object):
         :return: numpy array [X, Y, Z], shape=(3,)
         """
         # use camera params to convert (u, v) to ray
+        # u, v might be integers so convert to floats
         # Z coordinate is 1
-        ray_x = (u - self.cx) / self.fx
-        ray_y = (v - self.cy) / self.fy
+        ray_x = (float(u) - self.cx) / self.fx
+        ray_y = (float(v) - self.cy) / self.fy
         ray_cam = np.array([[ray_x], [ray_y], [1.]])
 
         # rotate ray to undo known camera elevation
