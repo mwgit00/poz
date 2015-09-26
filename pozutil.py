@@ -1,10 +1,7 @@
 """POZ Utility Functions and Classes
-
 """
-
 import numpy as np
 import math
-
 
 RAD2DEG = 180.0 / np.pi
 DEG2RAD = np.pi / 180.0
@@ -48,6 +45,11 @@ def calc_rot_mat(roll_phi, pitch_theta, yaw_psi):
     return rpy
 
 
+def solve(a, b, gamma):
+    c_squ = (a * a + b * b - (2 * a * b * math.cos(gamma)))
+    return c_squ
+
+
 # camera convention
 #
 # 0 --------- X+
@@ -66,6 +68,7 @@ def calc_rot_mat(roll_phi, pitch_theta, yaw_psi):
 
 
 class CameraHelper(object):
+
     def __init__(self):
         # TODO -- make it accept OpenCV intrinsic camera calib matrix
         # test params 640 by 480
@@ -85,27 +88,26 @@ class CameraHelper(object):
         pixel_v = self.fy * (xyz[1] / xyz[2]) + self.cy
         return pixel_u, pixel_v
 
-    def calc_elev_azim(self, u, v):
-        """Calculate elevation and azimuth to image point.
+    def calc_azim_elev(self, u, v):
+        """Calculate azimuth (radians) and elevation (radians) to image point.
         :param u: horizontal pixel coordinate
         :param v: vertical pixel coordinate
         """
         # need negation here so elevation matches convention listed above
-        ang_elevation = math.atan((self.cy - v) / self.fy)
-        ang_elevation *= RAD2DEG
         ang_azimuth = math.atan((u - self.cx) / self.fx)
-        ang_azimuth *= RAD2DEG
-        return ang_elevation, ang_azimuth
+        ang_elevation = math.atan((self.cy - v) / self.fy)
+        return ang_azimuth, ang_elevation,
 
-    def calc_rng_azi_to_landmark(self, xyz, u, v, cam_elev):
-        """Calculate range and azimuth to known landmark.
-        :param xyz: landmark world coords, shape = (3,)
+    def calc_rel_xyz_to_landmark(self, known_y, u, v, cam_elev):
+        """Calculate camera-relative X,Y,Z vector to known landmark in image.
+        :param known_y: landmark world Y coord.
         :param u: landmark horiz. pixel coord.
         :param v: landmark vert. pixel coord.
         :param cam_elev: camera elevation (radians)
-        :return:
+        :return: numpy array [X, Y, Z], shape=(3,)
         """
-        # use camera params to convert (u, v) to normalized ray
+        # use camera params to convert (u, v) to ray
+        # Z coordinate is 1
         ray_x = (u - self.cx) / self.fx
         ray_y = (v - self.cy) / self.fy
         ray_cam = np.array([[ray_x], [ray_y], [1.]])
@@ -115,11 +117,8 @@ class CameraHelper(object):
         ray_cam_unrot = np.dot(ro_mat_undo_ele, ray_cam)
 
         # scale ray based on known height (Y) of landmark
-        rescale = xyz[1] / ray_cam_unrot[1][0]
+        # this has [X, Y, Z] relative to camera body
+        # (can derive angles and ranges from that vector)
+        rescale = known_y / ray_cam_unrot[1][0]
         ray_cam_unrot_rescale = np.multiply(ray_cam_unrot, rescale)
-
-        # calculate L2 norm to get distance to landmark
-        # and calculate azimuth relative to camera
-        r = np.linalg.norm(ray_cam_unrot_rescale)
-        azi = math.atan(ray_cam_unrot[0] / ray_cam_unrot[2])
-        return r, azi
+        return ray_cam_unrot_rescale.reshape(3,)
