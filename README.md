@@ -1,6 +1,5 @@
 # poz
 
-Python code for known landmark triangulation.
+Python code for robot navigation.
 
-Someday this might have Python code for robot navigation.
-Right now, it just has some stuff for triangulating with known landmarks.
+The dream is to have some spiffy vision-based navigation stuff one day.  Right now, it just has some test stuff for triangulating with known landmarks.
