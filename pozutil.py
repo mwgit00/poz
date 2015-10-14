@@ -49,24 +49,26 @@ def triangulate_calc_c(a, b, gamma):
     c_squ = (a * a + b * b - (2 * a * b * math.cos(gamma)))
     return math.sqrt(c_squ)
 
+
 def triangulate_calc_gamma(a, b, c):
-    gamma_cos = (a * a + b * b - c *c) / (2 * a * b)
+    gamma_cos = (a * a + b * b - c * c) / (2 * a * b)
     return math.acos(gamma_cos)
 
 
 # camera convention
 #
-# 0 --------- X+
+# 0 --------- +X
 # |           |
 # |  (cx,cy)  |
 # |           |
-# Y+ --------- (w,h)
+# +Y --------- (w,h)
 #
 # right-hand rule for Z
-# Z- is pointing into camera, Z+ is pointing away from camera
+# -Z is pointing into camera, +Z is pointing away from camera
+# +X (fingers) cross +Y (palm) will make +Z (thumb) point away from camera
 #
-# positive elevation is clockwise rotation around X
-# positive azimuth is clockwise rotation around Y
+# positive elevation is clockwise rotation around X (axis pointing "out")
+# positive azimuth is clockwise rotation around Y (axis pointing "out")
 # +elevation TO point (u,v) is UP
 # +azimuth TO point (u,v) is RIGHT
 
