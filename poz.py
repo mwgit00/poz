@@ -82,33 +82,31 @@ def perspective_test(_y, _z, _ele, _azi):
     print
 
 
-def ground_range(xyz):
-    x, _, z = xyz
-    return math.sqrt(x * x + z * z)
+# 10x16 "room"
+# with landmarks at each corner at height -8
+# height is negative to be consistent with right-hand coordinate system
+# asterisks are secondary landmarks
+#
+# +Z
+# 0,16 ---*- 10,16
+#  | B       C |
+#  *           |
+#  |           |
+#  |           |
+#  *           |
+#  | A       D |
+#  0,0 ---*- 10,0 +X
+
+mark1 = {"A": pu.Landmark([0., -8., 0.], 0, -270),
+         "B": pu.Landmark([0., -8., 16.], 270.0, 0),
+         "C": pu.Landmark([10., -8., 16.], 180, -90),
+         "D": pu.Landmark([10., -8., 0.], 90, -180)}
 
 
-def triangulate_with_known_y(cam_model, _cam_elev, y1, y2, img_pt1, img_pt2):
-    u1, v1 = img_pt1
-    u2, v2 = img_pt2
-    elev = _cam_elev * pu.DEG2RAD
-    xyz1_calc = cam_model.calc_rel_xyz_to_landmark(y1, u1, v1, elev)
-    a = ground_range(xyz1_calc)
-    xyz2_calc = cam_model.calc_rel_xyz_to_landmark(y2, u2, v2, elev)
-    b = ground_range(xyz2_calc)
-    c = np.linalg.norm(xyz2_calc - xyz1_calc)
-    return a, b, c
-
-
-mark1 = {"A": [0., -8., 0.],
-         "B": [0., -8., 16.],
-         "C": [10., -8., 16.],
-         "D": [10., -8., 0.]}
-
-
-mark2 = {"A": [0., -8., 2.],
-         "B": [2., -8., 16.],
-         "C": [10., -8., 14.],
-         "D": [8., -8., 0.]}
+mark2 = {"A": pu.Landmark([0., -8., 2.]),
+         "B": pu.Landmark([2., -8., 16.]),  # (0, -8, 14) or (2, -8, 16)
+         "C": pu.Landmark([8., -8., 16.]),
+         "D": pu.Landmark([8., -8., 0.])}
 
 
 def landmark_test(_tag, _x, _y, _z, _ele, _azi):
@@ -120,11 +118,11 @@ def landmark_test(_tag, _x, _y, _z, _ele, _azi):
 
     cam = pu.CameraHelper()
 
-    xyz1 = np.float32(mark1[_tag]) - np.float32([_x, _y, _z])
+    xyz1 = mark1[_tag].xyz - np.float32([_x, _y, _z])
     xyz1_r = rot_axes_rpy_deg(xyz1, _ele, _azi, 0)
     u1, v1 = cam.project_xyz_to_uv(xyz1_r)
 
-    xyz2 = np.float32(mark2[_tag]) - np.float32([_x, _y, _z])
+    xyz2 = mark2[_tag].xyz - np.float32([_x, _y, _z])
     xyz2_r = rot_axes_rpy_deg(xyz2, _ele, _azi, 0)
     u2, v2 = cam.project_xyz_to_uv(xyz2_r)
 
@@ -134,38 +132,19 @@ def landmark_test(_tag, _x, _y, _z, _ele, _azi):
     print "Image Landmark #2:", (u2, v2)
     print
 
-    is_good = True
-    if u1 <= 0 or u1 >= 640:
-        is_good = False
-    if u2 <= 0 or u2 >= 640:
-        is_good = False
-    if v1 <= 0 or v1 >= 480:
-        is_good = False
-    if v2 <= 0 or v2 >= 480:
-        is_good = False
-    if is_good:
+    if cam.is_visible(u1, v1) and cam.is_visible(u2, v2):
         print "Landmarks visible in image!"
         print
     else:
         print "Landmarks not visible"
         return
 
-    ground1, ground2, cc = triangulate_with_known_y(cam, cam_elev, xyz1[1],
-                                                    xyz2[1], (u1, v1), (u2, v2))
-    print "a = ", ground1
-    print "b = ", ground2
-    print "c = ", cc
-    print
-
-    print "Find angles with three known sides (Law of Cosines):"
-    xx0 = pu.triangulate_calc_gamma(ground1, cc, ground2)
-    print xx0 * pu.RAD2DEG, math.cos(xx0) * ground1, math.sin(xx0) * ground1
-    xx1 = pu.triangulate_calc_gamma(ground2, cc, ground1) * pu.RAD2DEG
-    print xx1
-    xx2 = pu.triangulate_calc_gamma(ground1, ground2, cc) * pu.RAD2DEG
-    print xx2
-
-    print "sum = ", (xx0 * pu.RAD2DEG) + xx1 + xx2
+    print (u1, v1)
+    print (u2, v2)
+    ang, r = cam.triangulate_with_known_y(xyz1[1], xyz2[1], (u1, v1), (u2, v2), cam_elev)
+    print ang * pu.RAD2DEG, r
+    world_x, world_z = mark1[_tag].calc_world_xz(u1, u2, ang, r)
+    print "Robot is at", world_x, world_z
     print
 
     print "Now try with integer pixel coords and known Y coords..."
@@ -174,21 +153,10 @@ def landmark_test(_tag, _x, _y, _z, _ele, _azi):
     print ilm1
     print ilm2
 
-    ground1, ground2, cc = triangulate_with_known_y(cam, cam_elev, xyz1[1],
-                                                    xyz2[1], ilm1, ilm2)
-    print "a = ", ground1
-    print "b = ", ground2
-    print "c = ", cc
-    print
-
-    print "Find angles with three known sides (Law of Cosines):"
-    xx0 = pu.triangulate_calc_gamma(ground1, cc, ground2)
-    print xx0 * pu.RAD2DEG, math.cos(xx0) * ground1, math.sin(xx0) * ground1
-    xx1 = pu.triangulate_calc_gamma(ground2, cc, ground1) * pu.RAD2DEG
-    print xx1
-    xx2 = pu.triangulate_calc_gamma(ground1, ground2, cc) * pu.RAD2DEG
-    print xx2
-    print "sum = ", (xx0 * pu.RAD2DEG) + xx1 + xx2
+    ang, r = cam.triangulate_with_known_y(xyz1[1], xyz2[1], ilm1, ilm2, cam_elev)
+    print ang * pu.RAD2DEG, r
+    world_x, world_z = mark1[_tag].calc_world_xz(u1, u2, ang, r)
+    print "Robot is at", world_x, world_z
     print
 
     print "Done."
@@ -199,12 +167,14 @@ if __name__ == "__main__":
     # robot knows this about its camera
     # (arbitrary)
     cam_y = -3.
-    cam_elev = 0  # 7.0
+    cam_elev = 30.  # 7.0
 
     # robot does not know these
-    # (will solve for them)
+    # (it will have to solve for them)
     cam_x = 1.  # 0.0
     cam_z = 1.  # 12.0
-    cam_azi = 0  # 0,0 for B, 30.0 for C, 120,30 for D
+    cam_azi = 30  # 0,0 for B; 30,0 for C; 120,30 for D; 225,70 for A
 
-    landmark_test("B", cam_x, cam_y, cam_z, cam_elev, cam_azi)
+    code = "C"
+    print "Landmark", code
+    landmark_test(code, cam_x, cam_y, cam_z, cam_elev, cam_azi)
