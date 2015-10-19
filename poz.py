@@ -1,10 +1,10 @@
-"""POZ Development Application.
-
+"""
+POZ Development Application.
 """
 
 import math
 import numpy as np
-import cv2
+#import cv2
 
 import pozutil as pu
 
@@ -65,21 +65,21 @@ def perspective_test(_y, _z, _ele, _azi):
     print quv4
     print
 
-    h, _ = cv2.findHomography(puv, quv)
-    hh = cv2.getPerspectiveTransform(puv4, quv4)
-    print h
-    print hh
+    # h, _ = cv2.findHomography(puv, quv)
+    # hh = cv2.getPerspectiveTransform(puv4, quv4)
+    # print h
+    # print hh
 
     # perspectiveTransform needs an extra dimension
     puv1 = np.expand_dims(puv, axis=0)
 
-    print "Test perspectiveTransform with findHomography matrix:"
-    xpersp = cv2.perspectiveTransform(puv1, h)
-    print xpersp
-    print "Test perspectiveTransform with getPerspectiveTransform matrix:"
-    xpersp = cv2.perspectiveTransform(puv1, hh)
-    print xpersp
-    print
+    # print "Test perspectiveTransform with findHomography matrix:"
+    # xpersp = cv2.perspectiveTransform(puv1, h)
+    # print xpersp
+    # print "Test perspectiveTransform with getPerspectiveTransform matrix:"
+    # xpersp = cv2.perspectiveTransform(puv1, hh)
+    # print xpersp
+    # print
 
 
 # 10x16 "room"
@@ -88,41 +88,43 @@ def perspective_test(_y, _z, _ele, _azi):
 # asterisks are secondary landmarks
 #
 # +Z
-# 0,16 ---*- 10,16
-#  | B       C |
-#  *           |
-#  |           |
-#  |           |
-#  *           |
-#  | A       D |
-#  0,0 ---*- 10,0 +X
+# 0,16 -*--*- 10,16
+#  | B        C |
+#  *            *
+#  |            |
+#  |            |
+#  *            *
+#  | A        D |
+#  0,0 -*--*- 10,0 +X
 
+# "fixed" landmarks
 mark1 = {"A": pu.Landmark([0., -8., 0.], 0, -270),
          "B": pu.Landmark([0., -8., 16.], 270.0, 0),
          "C": pu.Landmark([10., -8., 16.], 180, -90),
          "D": pu.Landmark([10., -8., 0.], 90, -180)}
 
-
-mark2 = {"A": pu.Landmark([0., -8., 2.]),
-         "B": pu.Landmark([2., -8., 16.]),  # (0, -8, 14) or (2, -8, 16)
+# landmarks that appear to left of fixed landmarks
+mark2 = {"A": pu.Landmark([2., -8., 0.]),
+         "B": pu.Landmark([0., -8., 14.]),
          "C": pu.Landmark([8., -8., 16.]),
+         "D": pu.Landmark([10., -8., 2.])}
+
+# landmarks that appear to right of fixed landmarks
+mark3 = {"A": pu.Landmark([0., -8., 2.]),
+         "B": pu.Landmark([2., -8., 16.]),
+         "C": pu.Landmark([10., -8., 14.]),
          "D": pu.Landmark([8., -8., 0.])}
 
 
-def landmark_test(_tag, _x, _y, _z, _ele, _azi):
-    print "--------------------------------------"
-    print "Landmark Test"
-    print "Camera Ele =", _ele
-    print "Camera Azi =", _azi
-    print
+def landmark_test(lm1, lm2, _x, _y, _z, _ele, _azi):
 
     cam = pu.CameraHelper()
 
-    xyz1 = mark1[_tag].xyz - np.float32([_x, _y, _z])
+    xyz1 = lm1.xyz - np.float32([_x, _y, _z])
     xyz1_r = rot_axes_rpy_deg(xyz1, _ele, _azi, 0)
     u1, v1 = cam.project_xyz_to_uv(xyz1_r)
 
-    xyz2 = mark2[_tag].xyz - np.float32([_x, _y, _z])
+    xyz2 = lm2.xyz - np.float32([_x, _y, _z])
     xyz2_r = rot_axes_rpy_deg(xyz2, _ele, _azi, 0)
     u2, v2 = cam.project_xyz_to_uv(xyz2_r)
 
@@ -143,7 +145,7 @@ def landmark_test(_tag, _x, _y, _z, _ele, _azi):
     print (u2, v2)
     ang, r = cam.triangulate_with_known_y(xyz1[1], xyz2[1], (u1, v1), (u2, v2), cam_elev)
     print ang * pu.RAD2DEG, r
-    world_x, world_z = mark1[_tag].calc_world_xz(u1, u2, ang, r)
+    world_x, world_z = lm1.calc_world_xz(u1, u2, ang, r)
     print "Robot is at", world_x, world_z
     print
 
@@ -155,7 +157,7 @@ def landmark_test(_tag, _x, _y, _z, _ele, _azi):
 
     ang, r = cam.triangulate_with_known_y(xyz1[1], xyz2[1], ilm1, ilm2, cam_elev)
     print ang * pu.RAD2DEG, r
-    world_x, world_z = mark1[_tag].calc_world_xz(u1, u2, ang, r)
+    world_x, world_z = lm1.calc_world_xz(u1, u2, ang, r)
     print "Robot is at", world_x, world_z
     print
 
@@ -167,14 +169,21 @@ if __name__ == "__main__":
     # robot knows this about its camera
     # (arbitrary)
     cam_y = -3.
-    cam_elev = 30.  # 7.0
+    cam_elev = 0.  # 7.0
 
     # robot does not know these
     # (it will have to solve for them)
     cam_x = 1.  # 0.0
     cam_z = 1.  # 12.0
-    cam_azi = 30  # 0,0 for B; 30,0 for C; 120,30 for D; 225,70 for A
-
+    cam_azi = 30.  # 0,0 for B; 30,0 for C; 120,30 for D; 225,70 for A
     code = "C"
+
+    print "--------------------------------------"
+    print "Landmark Test"
+    print "Camera Ele =", cam_elev
+    print "Camera Azi =", cam_azi
     print "Landmark", code
-    landmark_test(code, cam_x, cam_y, cam_z, cam_elev, cam_azi)
+    print
+
+    landmark_test(mark1[code], mark2[code], cam_x, cam_y, cam_z, cam_elev, cam_azi)
+
