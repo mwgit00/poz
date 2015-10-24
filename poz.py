@@ -89,6 +89,8 @@ def perspective_test(_y, _z, _ele, _azi):
 #  0,0 -*--*- 10,0 +X
 
 # "fixed" landmarks
+# if looking down at the room, rotation about Y
+# should be clockwise, but these angles are CCW
 mark1 = {"A": pu.Landmark([0., -8., 0.], 0, -270),
          "B": pu.Landmark([0., -8., 16.], 270.0, 0),
          "C": pu.Landmark([10., -8., 16.], 180, -90),
@@ -150,19 +152,20 @@ def landmark_test(lm1, lm2, _x, _y, _z, _azi, _ele):
     print (u2, v2)
     lm1.set_current_uv((u1, v1))
     lm2.set_current_uv((u2, v2))
-    world_x, world_z = cam.calc_world_xz_azim(lm1, lm2)
-    print "Robot is at", world_x, world_z
+    world_x, world_z, world_azim = cam.triangulate_landmarks(lm1, lm2)
+    print "Robot is at", world_x, world_z, world_azim * pu.RAD2DEG
     print
 
-    print "Now try with integer pixel coords and known Y coords..."
-    lm1.set_current_uv((int(u1 + 0.5), int(v1 + 0.5)))
-    lm2.set_current_uv((int(u2 + 0.5), int(v2 + 0.5)))
-    print lm1.uv
-    print lm2.uv
+    if False:
+        print "Now try with integer pixel coords and known Y coords..."
+        lm1.set_current_uv((int(u1 + 0.5), int(v1 + 0.5)))
+        lm2.set_current_uv((int(u2 + 0.5), int(v2 + 0.5)))
+        print lm1.uv
+        print lm2.uv
 
-    world_x, world_z = cam.calc_world_xz_azim(lm1, lm2)
-    print "Robot is at", world_x, world_z
-    print
+        world_x, world_z, world_azim = cam.triangulate_landmarks(lm1, lm2)
+        print "Robot is at", world_x, world_z, world_azim * pu.RAD2DEG
+        print
 
     print "Done."
     return True
@@ -181,9 +184,10 @@ if __name__ == "__main__":
 
     # TODO -- solve for robot's heading/azimuth somehow
 
+    # robot is always "looking" in its +Z direction
     # landmark code mapped to [azim, elev] for visibility at world (1,1)
     lm_vis = {"A": [225., 70.],
-              "B": [0., 0.],
+              "B": [0., 30.],
               "C": [30., 0.],
               "D": [90., 30.]}
 
@@ -191,12 +195,13 @@ if __name__ == "__main__":
     print "Landmark Test"
     print
 
-    code = "D"
-    cam_azi = lm_vis[code][0]
-    cam_elev = lm_vis[code][1]
+    for key in sorted(lm_vis.keys()):
+        code = key
+        cam_azim = lm_vis[code][0]
+        cam_elev = lm_vis[code][1]
 
-    print "Camera Ele =", cam_elev
-    print "Camera Azi =", cam_azi
-    print "Landmark", code
+        print "Camera Ele =", cam_elev
+        print "Camera Azi =", cam_azim
+        print "Landmark", code
 
-    landmark_test(mark1[code], mark2[code], cam_x, cam_y, cam_z, cam_azi, cam_elev)
+        landmark_test(mark1[code], mark2[code], cam_x, cam_y, cam_z, cam_azim, cam_elev)

@@ -62,13 +62,13 @@ def calc_xyz_after_rotation_deg(xyz_pos, roll, pitch, yaw):
 
 class Landmark(object):
 
-    def __init__(self, xyz=None, _ang_pos=None, _ang_neg=None, id=""):
+    def __init__(self, xyz=None, _ang_pos=None, _ang_neg=None, name=""):
         """
         Initializer for Landmark class.
         :param xyz: List with [X, Y, Z] coordinates.
         :param _ang_pos: Positive angle adjustment offset.
         :param _ang_neg: Negative angle adjustment offset.
-        :param id: Optional identifier
+        :param name: Optional identifier
         """
         if xyz:
             assert(isinstance(xyz, list))
@@ -77,7 +77,7 @@ class Landmark(object):
             self.xyz = np.zeros(3, dtype=float)
         self.ang_pos = _ang_pos
         self.ang_neg = _ang_neg
-        self.id = id
+        self.name = name
         self.uv = (0., 0.)
 
     def set_current_uv(self, uv):
@@ -87,15 +87,23 @@ class Landmark(object):
         """
         self.uv = uv
 
-    def calc_world_xz(self, u1, u2, ang, r):
+    def get_angle_offset(self, u1, u2):
+        if u1 < u2:
+            ang_adj = self.ang_neg * DEG2RAD
+        else:
+            ang_adj = self.ang_pos * DEG2RAD
+        return ang_adj
+
+    def apply_angle_offset(self, u1, u2, ang, r):
         """
-        Determine world position
+        Determine world position and pointing direction
         given relative horizontal positions of landmarks
-        and previous triangulation result (angle, range).
+        and previous triangulation result (angle, range, azim).
         :param u1: Horizontal coordinate of landmark 1
         :param u2: Horizontal coordinate of landmark 2
-        :param ang: Relative azimuth to landmark
-        :param r: Ground range to landmark
+        :param ang: Relative azimuth from landmark 1 & 2
+        :param r: Ground range to landmark 1
+        :param azim: Camera azimuth to landmark 1
         :return: X, Z in world coordinates
         """
         if u1 < u2:
@@ -104,7 +112,7 @@ class Landmark(object):
             ang_adj = self.ang_pos * DEG2RAD + ang
         world_x = self.xyz[0] + math.cos(ang_adj) * r
         world_z = self.xyz[2] + math.sin(ang_adj) * r
-        return world_x, world_z
+        return world_x, world_z, ang_adj
 
 
 # camera convention
@@ -204,20 +212,26 @@ class CameraHelper(object):
         ray_cam_unrot_rescale = np.multiply(ray_cam_unrot, rescale)
         return ray_cam_unrot_rescale.reshape(3,)
 
-    def triangulate_landmarks(self, lm1, lm2):
+    def triangulate_landmarks(self, lm_fix, lm_var):
         """
+        Use sightings of a fixed landmark and variable landmark
+        to perform triangulation.  Convert angle and range
+        from triangulation into world coordinates based
+        on fixed landmark's known orientation in world.
 
-        :param lm1: Landmark 1
-        :param lm2: Landmark 2
-        :return: angle, ground range to Landmark 1
+        :param lm_fix: Fixed Landmark #1 with known orientation in world.
+        :param lm_var: Variable Landmark #2 (orientation may not be known).
+        :return: angle, ground range to Landmark 1, world azim for camera
         """
+        assert(isinstance(lm_fix, Landmark))
+        assert(isinstance(lm_var, Landmark))
 
         # TODO -- allow case where y1 and y2 differ (not sure how yet)
 
-        known_y1 = lm1.xyz[1] - self.world_y
-        known_y2 = lm2.xyz[1] - self.world_y
-        u1, v1 = lm1.uv
-        u2, v2 = lm2.uv
+        known_y1 = lm_fix.xyz[1] - self.world_y
+        known_y2 = lm_var.xyz[1] - self.world_y
+        u1, v1 = lm_fix.uv
+        u2, v2 = lm_var.uv
 
         # find relative vector to landmark 1
         # absolute location of this landmark should be known
@@ -225,6 +239,9 @@ class CameraHelper(object):
         xyz1 = self.calc_rel_xyz_to_pixel(known_y1, u1, v1, self.elev)
         x1, _, z1 = xyz1
         r1 = math.sqrt(x1 * x1 + z1 * z1)
+
+        # also grab relative azim to landmark 1
+        rel_azim = math.atan(x1 / z1)
 
         # find relative vector to landmark 2
         # this landmark could be point along an edge at unknown position
@@ -244,25 +261,18 @@ class CameraHelper(object):
         gamma_cos = (r1 * r1 + c * c - r2 * r2) / (2 * r1 * c)
         angle = math.acos(gamma_cos)
 
-        return angle, r1
+        # cam_azim = -(angle + rel_azim)  mark1 mark2
+        cam_azim = (angle - rel_azim)  # mark1 mark3
+        print angle * RAD2DEG
+        print rel_azim * RAD2DEG
+        #print cam_azim * RAD2DEG, r1
 
-    def calc_world_xz_azim(self, lm_fix, lm_var):
-        """
-        Use sightings of a fixed landmark and variable landmark
-        to perform triangulation.  Convert angle and range
-        from triangulation into world coordinates based
-        on fixed landmark's known orientation in world.
-        :param lm_fix: Fixed Landmark with known orientation in world.
-        :param lm_var: Variable Landmark (orientation may not be known).
-        :return: X, Z in world coordinates
-        """
-        assert(isinstance(lm_fix, Landmark))
-        assert(isinstance(lm_var, Landmark))
-        ang, r = self.triangulate_landmarks(lm_fix, lm_var)
         u1 = lm_fix.uv[0]
         u2 = lm_var.uv[0]
-        x, z = lm_fix.calc_world_xz(u1, u2, ang, r)
-        return x, z
+        ang_offset = lm_fix.get_angle_offset(u1, u2)
+        print ang_offset * RAD2DEG
+        x, z, ang_adj = lm_fix.apply_angle_offset(u1, u2, angle, r1)
+        return x, z, ang_adj
 
 
 if __name__ == "__main__":
