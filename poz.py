@@ -2,19 +2,10 @@
 POZ Development Application.
 """
 
-import math
 import numpy as np
-#import cv2
+# import cv2
 
 import pozutil as pu
-
-
-def rot_axes_rpy_deg(xyz_pos, _roll, _pitch, _yaw):
-    # rotates axes by roll-pitch-yaw angles in degrees
-    # and returns new position with respect to rotated axes
-    # (rotate along X, Y, Z in that order to visualize)
-    ro_mat = pu.calc_rot_mat(_roll * pu.DEG2RAD, _pitch * pu.DEG2RAD, _yaw * pu.DEG2RAD)
-    return np.dot(ro_mat, np.transpose(xyz_pos))
 
 
 def perspective_test(_y, _z, _ele, _azi):
@@ -47,7 +38,7 @@ def perspective_test(_y, _z, _ele, _azi):
         u, v = cam.project_xyz_to_uv(vp)
         puv_acc.append(np.float32([u, v]))
         # rotated view of landmarks
-        xyz_r = rot_axes_rpy_deg(vp, _ele, _azi, 0)
+        xyz_r = pu.calc_xyz_after_rotation_deg(vp, _ele, _azi, 0)
         u, v = cam.project_xyz_to_uv(xyz_r)
         quv_acc.append(np.float32([u, v]))
     puv = np.array(puv_acc)
@@ -116,16 +107,23 @@ mark3 = {"A": pu.Landmark([0., -8., 2.]),
          "D": pu.Landmark([8., -8., 0.])}
 
 
-def landmark_test(lm1, lm2, _x, _y, _z, _ele, _azi):
+def landmark_test(lm1, lm2, _x, _y, _z, _azi, _ele):
 
     cam = pu.CameraHelper()
 
-    xyz1 = lm1.xyz - np.float32([_x, _y, _z])
-    xyz1_r = rot_axes_rpy_deg(xyz1, _ele, _azi, 0)
+    # for the two landmarks:
+    # - translate landmark by camera offset
+    # - rotate by azimuth and elevation
+    # - project into image
+
+    cam_xyz = np.float32([_x, _y, _z])
+
+    xyz1 = lm1.xyz - cam_xyz
+    xyz1_r = pu.calc_xyz_after_rotation_deg(xyz1, _ele, _azi, 0)
     u1, v1 = cam.project_xyz_to_uv(xyz1_r)
 
-    xyz2 = lm2.xyz - np.float32([_x, _y, _z])
-    xyz2_r = rot_axes_rpy_deg(xyz2, _ele, _azi, 0)
+    xyz2 = lm2.xyz - cam_xyz
+    xyz2_r = pu.calc_xyz_after_rotation_deg(xyz2, _ele, _azi, 0)
     u2, v2 = cam.project_xyz_to_uv(xyz2_r)
 
     print "Known Landmark #1:", xyz1
@@ -139,29 +137,35 @@ def landmark_test(lm1, lm2, _x, _y, _z, _ele, _azi):
         print
     else:
         print "Landmarks not visible"
-        return
+        return False
+
+    # all is well so proceed with test...
+
+    # landmarks have been acquired
+    # camera elevation and world Y also need updating
+    cam.elev = _ele * pu.DEG2RAD
+    cam.world_y = _y
 
     print (u1, v1)
     print (u2, v2)
-    ang, r = cam.triangulate_with_known_y(xyz1[1], xyz2[1], (u1, v1), (u2, v2), cam_elev)
-    print ang * pu.RAD2DEG, r
-    world_x, world_z = lm1.calc_world_xz(u1, u2, ang, r)
+    lm1.set_current_uv((u1, v1))
+    lm2.set_current_uv((u2, v2))
+    world_x, world_z = cam.calc_world_xz_azim(lm1, lm2)
     print "Robot is at", world_x, world_z
     print
 
     print "Now try with integer pixel coords and known Y coords..."
-    ilm1 = ((int(u1 + 0.5)), (int(v1 + 0.5)))
-    ilm2 = ((int(u2 + 0.5)), (int(v2 + 0.5)))
-    print ilm1
-    print ilm2
+    lm1.set_current_uv((int(u1 + 0.5), int(v1 + 0.5)))
+    lm2.set_current_uv((int(u2 + 0.5), int(v2 + 0.5)))
+    print lm1.uv
+    print lm2.uv
 
-    ang, r = cam.triangulate_with_known_y(xyz1[1], xyz2[1], ilm1, ilm2, cam_elev)
-    print ang * pu.RAD2DEG, r
-    world_x, world_z = lm1.calc_world_xz(u1, u2, ang, r)
+    world_x, world_z = cam.calc_world_xz_azim(lm1, lm2)
     print "Robot is at", world_x, world_z
     print
 
     print "Done."
+    return True
 
 
 if __name__ == "__main__":
@@ -169,21 +173,30 @@ if __name__ == "__main__":
     # robot knows this about its camera
     # (arbitrary)
     cam_y = -3.
-    cam_elev = 0.  # 7.0
 
-    # robot does not know these
-    # (it will have to solve for them)
+    # robot does not know this
+    # it will have to solve for it
     cam_x = 1.  # 0.0
     cam_z = 1.  # 12.0
-    cam_azi = 30.  # 0,0 for B; 30,0 for C; 120,30 for D; 225,70 for A
-    code = "C"
+
+    # TODO -- solve for robot's heading/azimuth somehow
+
+    # landmark code mapped to [azim, elev] for visibility at world (1,1)
+    lm_vis = {"A": [225., 70.],
+              "B": [0., 0.],
+              "C": [30., 0.],
+              "D": [90., 30.]}
 
     print "--------------------------------------"
     print "Landmark Test"
+    print
+
+    code = "D"
+    cam_azi = lm_vis[code][0]
+    cam_elev = lm_vis[code][1]
+
     print "Camera Ele =", cam_elev
     print "Camera Azi =", cam_azi
     print "Landmark", code
-    print
 
-    landmark_test(mark1[code], mark2[code], cam_x, cam_y, cam_z, cam_elev, cam_azi)
-
+    landmark_test(mark1[code], mark2[code], cam_x, cam_y, cam_z, cam_azi, cam_elev)
