@@ -1,4 +1,5 @@
-"""POZ Utility Functions and Classes
+"""
+POZ Utility Functions and Classes
 """
 import numpy as np
 import math
@@ -149,6 +150,14 @@ class Landmark(object):
 # positive azimuth is clockwise rotation around Y (axis pointing "out")
 # +elevation TO point (u,v) is UP
 # +azimuth TO point (u,v) is RIGHT
+#
+# robot camera is always "looking" in its +Z direction
+# so its world azimuth is 0 when robot is pointing in +Z direction
+# since that is when the two coordinate systems line up
+#
+# world location is in X,Z plane
+# normally the +X axis in X,Z plane would be an angle of 0
+# but there is a 90 degree rotation between X,Z and world azimuth
 
 
 class CameraHelper(object):
