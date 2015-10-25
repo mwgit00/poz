@@ -110,12 +110,26 @@ class Landmark(object):
         return world_x, world_z
 
     def calc_world_azim(self, u_var, ang, rel_azim):
-        # TODO -- this will break if landmarks not at right angles
-        offset_rad = self.ang_u1min * DEG2RAD
+        """
+        Convert camera's azimuth to LM to world azimuth.
+        Relative azimuth in camera view is also considered.
+        :param u_var: U coordinate of variable LM
+        :param ang: Angle between camera and LM1-to-LM2 vector
+        :param rel_azim: Relative azimuth to LM as seen in image
+        :return: World azimuth (radians)
+        """
+        # there's a 90 degree rotation from camera view to world angle
         if self.uv[0] > u_var:
-            world_azim = offset_rad - (ang + rel_azim)
+            offset_rad = self.ang_u1max * DEG2RAD
+            world_azim = offset_rad - ang - rel_azim - (np.pi / 2.)
         else:
-            world_azim = offset_rad + (ang - rel_azim - (np.pi / 2))
+            offset_rad = self.ang_u1min * DEG2RAD
+            world_azim = offset_rad + ang - rel_azim - (np.pi / 2.)
+        # clunky way ensure 0 <= world_azim < 360
+        if world_azim < 0.:
+            world_azim += (2. * np.pi)
+        if world_azim < 0.:
+            world_azim += (2. * np.pi)
         return world_azim
 
 
@@ -230,8 +244,7 @@ class CameraHelper(object):
         assert(isinstance(lm_fix, Landmark))
         assert(isinstance(lm_var, Landmark))
 
-        # TODO -- allow case where y1 and y2 differ (not sure how yet)
-
+        # landmarks can be at different heights
         known_y1 = lm_fix.xyz[1] - self.world_y
         known_y2 = lm_var.xyz[1] - self.world_y
         u1, v1 = lm_fix.uv
