@@ -88,21 +88,24 @@ def perspective_test(_y, _z, _ele, _azi):
 #  | A        D |
 #  0,0 -*--*- 10,0 +X
 
-# "fixed" landmarks
-# if looking down at the room, rotation about Y
-# should be clockwise, but these angles are CCW
-mark1 = {"A": pu.Landmark([0., -8., 0.], 0, -270),
-         "B": pu.Landmark([0., -8., 16.], 270.0, 0),
-         "C": pu.Landmark([10., -8., 16.], 180, -90),
-         "D": pu.Landmark([10., -8., 0.], 90, -180)}
+# world location is in X,Z plane
+# if looking down at the room
+# then positive rotation about Y is clockwise
 
-# landmarks that appear to left of fixed landmarks
+
+# "fixed" landmarks
+mark1 = {"A": pu.Landmark([0., -8., 0.], 0., 270.),
+         "B": pu.Landmark([0., -8., 16.], -270.0, 0.),
+         "C": pu.Landmark([10., -8., 16.], -180., 90.),
+         "D": pu.Landmark([10., -8., 0.], -90., 180.)}
+
+# landmarks that appear to left of fixed landmarks (u1 is MAX)
 mark2 = {"A": pu.Landmark([2., -8., 0.]),
          "B": pu.Landmark([0., -8., 14.]),
          "C": pu.Landmark([8., -8., 16.]),
          "D": pu.Landmark([10., -8., 2.])}
 
-# landmarks that appear to right of fixed landmarks
+# landmarks that appear to right of fixed landmarks (u1 is MIN)
 mark3 = {"A": pu.Landmark([0., -8., 2.]),
          "B": pu.Landmark([2., -8., 16.]),
          "C": pu.Landmark([10., -8., 14.]),
@@ -179,13 +182,17 @@ if __name__ == "__main__":
 
     # robot does not know this
     # it will have to solve for it
-    cam_x = 1.  # 0.0
-    cam_z = 1.  # 12.0
+    cam_x = 1.
+    cam_z = 1.
 
     # TODO -- solve for robot's heading/azimuth somehow
 
-    # robot is always "looking" in its +Z direction
-    # landmark code mapped to [azim, elev] for visibility at world (1,1)
+    # robot camera is always "looking" in its +Z direction
+    # so its world azimuth is 0 when robot is pointing in +Z direction
+    # since that is when the two coordinate systems line up
+
+    # landmark name mapped to [world_azim, elev]
+    # for visibility at world (1,1)
     lm_vis = {"A": [225., 70.],
               "B": [0., 30.],
               "C": [30., 0.],
@@ -196,12 +203,12 @@ if __name__ == "__main__":
     print
 
     for key in sorted(lm_vis.keys()):
-        code = key
-        cam_azim = lm_vis[code][0]
-        cam_elev = lm_vis[code][1]
+        name = key
+        cam_azim = lm_vis[name][0]
+        cam_elev = lm_vis[name][1]
 
         print "Camera Ele =", cam_elev
         print "Camera Azi =", cam_azim
-        print "Landmark", code
+        print "Landmark", name
 
-        landmark_test(mark1[code], mark2[code], cam_x, cam_y, cam_z, cam_azim, cam_elev)
+        landmark_test(mark1[name], mark3[name], cam_x, cam_y, cam_z, cam_azim, cam_elev)

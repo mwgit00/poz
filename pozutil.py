@@ -62,12 +62,12 @@ def calc_xyz_after_rotation_deg(xyz_pos, roll, pitch, yaw):
 
 class Landmark(object):
 
-    def __init__(self, xyz=None, _ang_pos=None, _ang_neg=None, name=""):
+    def __init__(self, xyz=None, ang_u1max=None, ang_u1min=None, name=""):
         """
         Initializer for Landmark class.
         :param xyz: List with [X, Y, Z] coordinates.
-        :param _ang_pos: Positive angle adjustment offset.
-        :param _ang_neg: Negative angle adjustment offset.
+        :param ang_u1max: Adjustment when #1 is RIGHT landmark.
+        :param ang_u1min: Adjustment when #1 is LEFT landmark.
         :param name: Optional identifier
         """
         if xyz:
@@ -75,8 +75,8 @@ class Landmark(object):
             self.xyz = np.array(xyz, dtype=float)
         else:
             self.xyz = np.zeros(3, dtype=float)
-        self.ang_pos = _ang_pos
-        self.ang_neg = _ang_neg
+        self.ang_u1max = ang_u1max
+        self.ang_u1min = ang_u1min
         self.name = name
         self.uv = (0., 0.)
 
@@ -87,32 +87,36 @@ class Landmark(object):
         """
         self.uv = uv
 
-    def get_angle_offset(self, u1, u2):
-        if u1 < u2:
-            ang_adj = self.ang_neg * DEG2RAD
-        else:
-            ang_adj = self.ang_pos * DEG2RAD
-        return ang_adj
-
-    def apply_angle_offset(self, u1, u2, ang, r):
+    def calc_world_xz(self, u_var, ang, r):
         """
         Determine world position and pointing direction
         given relative horizontal positions of landmarks
-        and previous triangulation result (angle, range, azim).
-        :param u1: Horizontal coordinate of landmark 1
-        :param u2: Horizontal coordinate of landmark 2
-        :param ang: Relative azimuth from landmark 1 & 2
-        :param r: Ground range to landmark 1
-        :param azim: Camera azimuth to landmark 1
+        and previous triangulation result (angle, range).
+        :param u_var: Horizontal coordinate of variable landmark
+        :param ang: Angle to this landmark
+        :param r: Ground range to this landmark
         :return: X, Z in world coordinates
         """
-        if u1 < u2:
-            ang_adj = self.ang_neg * DEG2RAD - ang
+        if self.uv[0] > u_var:
+            ang_adj = self.ang_u1max * DEG2RAD - ang
         else:
-            ang_adj = self.ang_pos * DEG2RAD + ang
+            ang_adj = self.ang_u1min * DEG2RAD + ang
+
+        # in X,Z plane so need negative sine below
+        # to keep azimuth direction consistent
+        # (positive azimuth is clockwise)
         world_x = self.xyz[0] + math.cos(ang_adj) * r
-        world_z = self.xyz[2] + math.sin(ang_adj) * r
-        return world_x, world_z, ang_adj
+        world_z = self.xyz[2] - math.sin(ang_adj) * r
+        return world_x, world_z
+
+    def calc_world_azim(self, u_var, ang, rel_azim):
+        # TODO -- this will break if landmarks not at right angles
+        offset_rad = self.ang_u1min * DEG2RAD
+        if self.uv[0] > u_var:
+            world_azim = offset_rad - (ang + rel_azim)
+        else:
+            world_azim = offset_rad + (ang - rel_azim - (np.pi / 2))
+        return world_azim
 
 
 # camera convention
@@ -261,18 +265,11 @@ class CameraHelper(object):
         gamma_cos = (r1 * r1 + c * c - r2 * r2) / (2 * r1 * c)
         angle = math.acos(gamma_cos)
 
-        # cam_azim = -(angle + rel_azim)  mark1 mark2
-        cam_azim = (angle - rel_azim)  # mark1 mark3
-        print angle * RAD2DEG
-        print rel_azim * RAD2DEG
-        #print cam_azim * RAD2DEG, r1
-
-        u1 = lm_fix.uv[0]
-        u2 = lm_var.uv[0]
-        ang_offset = lm_fix.get_angle_offset(u1, u2)
-        print ang_offset * RAD2DEG
-        x, z, ang_adj = lm_fix.apply_angle_offset(u1, u2, angle, r1)
-        return x, z, ang_adj
+        # landmark has angle offset info
+        # which is used to calculate world coords and azim
+        world_azim = lm_fix.calc_world_azim(u2, angle, rel_azim)
+        x, z = lm_fix.calc_world_xz(u2, angle, r1)
+        return x, z, world_azim
 
 
 if __name__ == "__main__":
