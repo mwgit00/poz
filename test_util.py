@@ -42,7 +42,7 @@ y_cd = -8.
 # "fixed" landmarks
 mark1 = {"A": pu.Landmark([0., y_ab, 0.], 0., 270.),
          "B": pu.Landmark([0., y_ab, 16.], -270.0, 0.),
-         "C": pu.Landmark([8., y_cd, 16.], -180., 45.),
+         "C": pu.Landmark([8., y_ab + 1.6, 16.], -180., 45.),
          "D": pu.Landmark([13., y_cd, 0.], -90., 180.),
          "E": pu.Landmark([10., y_cd, 9.], -90., 0.),
          "F": pu.Landmark([13., y_cd, 6.], -90., 90.)}
@@ -50,10 +50,10 @@ mark1 = {"A": pu.Landmark([0., y_ab, 0.], 0., 270.),
 # landmarks that appear to left of fixed landmarks (u1 is MAX)
 mark2 = {"A": pu.Landmark([2., y_ab + 0.4, 0.]),
          "B": pu.Landmark([0., y_ab, 14.]),
-         "C": pu.Landmark([6., y_cd, 16.]),
+         "C": pu.Landmark([6., y_ab + 1.2, 16.]),
          "D": pu.Landmark([13., y_cd, 2.]),
          "E": pu.Landmark([10., y_cd, 11.]),
-         "F": pu.Landmark([13., y_cd, 7.])}
+         "F": pu.Landmark([13., y_cd + 1., 7.])}
 
 # landmarks that appear to right of fixed landmarks (u1 is MIN)
 mark3 = {"A": pu.Landmark([0., y_ab, 2.]),
@@ -61,7 +61,7 @@ mark3 = {"A": pu.Landmark([0., y_ab, 2.]),
          "C": pu.Landmark([10., y_cd, 14.]),
          "D": pu.Landmark([11., y_cd, 0.]),
          "E": pu.Landmark([12., y_cd, 9.]),
-         "F": pu.Landmark([13., y_cd, 5.])}
+         "F": pu.Landmark([13., y_cd + 1., 5.])}
 
 
 lm_vis_1_1 = {"A": [225., 70.],
