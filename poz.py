@@ -77,9 +77,10 @@ def perspective_test(_y, _z, _ele, _azi):
 
 if __name__ == "__main__":
 
-    # robot knows this about its camera
-    # (arbitrary)
-    cam_y = -3. + 0.  # change offset for testing
+    # robot always knows the Y and Elevation of its camera
+    # (arbitrary assignments for testing)
+    known_cam_y = -3.
+    known_cam_el = 0.0
 
     tests = [(1., 1., tpu.lm_vis_1_1),
              (7., 6., tpu.lm_vis_7_6)]
@@ -90,23 +91,24 @@ if __name__ == "__main__":
 
     test_index = 0
     vis_map = tests[test_index][2]
-    # robot does not know this
+
+    # robot does not know its (X, Z) position
     # it will have to solve for it
     cam_x = tests[test_index][0]
     cam_z = tests[test_index][1]
-    print cam_x, cam_z
+    print "Known (X,Z): ", (cam_x, cam_z)
+
     for key in sorted(vis_map.keys()):
-        name = key
-        cam_azim = vis_map[name][0] + 0.  # change offset for testing
-        cam_elev = vis_map[name][1] + 0.  # change offset for testing
+        cam_azim = vis_map[key].az + 0.  # change offset for testing
+        cam_elev = vis_map[key].el + known_cam_el
         print "-----------"
         # print "Known Camera Elev =", cam_elev
-        xyz = [cam_x, cam_y, cam_z]
+        xyz = [cam_x, known_cam_y, cam_z]
         angs = [cam_azim, cam_elev]
-        print "Landmark {:s}.  Camera Azim = {:8.2f}".format(name, cam_azim)
+        print "Landmark {:s}.  Camera Azim = {:8.2f}".format(key, cam_azim)
 
-        lm1 = tpu.mark1[name]
-        f, x, z, a = tpu.landmark_test(lm1, tpu.mark3[name], xyz, angs)
+        lm1 = tpu.mark1[key]
+        f, x, z, a = tpu.landmark_test(lm1, tpu.mark2[key], xyz, angs)
         print "Robot is at: {:6.3f},{:6.3f},{:20.14f}".format(x, z, a)
-        f, x, z, a = tpu.landmark_test(lm1, tpu.mark3[name], xyz, angs)
+        f, x, z, a = tpu.landmark_test(lm1, tpu.mark3[key], xyz, angs)
         print "Robot is at: {:6.3f},{:6.3f},{:20.14f}".format(x, z, a)
