@@ -112,3 +112,6 @@ if __name__ == "__main__":
         print "Robot is at: {:6.3f},{:6.3f},{:20.14f}".format(x, z, a)
         f, x, z, a = tpu.landmark_test(lm1, tpu.mark3[key], xyz, angs)
         print "Robot is at: {:6.3f},{:6.3f},{:20.14f}".format(x, z, a)
+
+        tpu.pnp_test(key, xyz, angs)
+
