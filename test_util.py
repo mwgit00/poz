@@ -2,6 +2,7 @@
 import unittest
 import numpy as np
 import pozutil as pu
+import cv2
 
 from collections import namedtuple
 tup_az_el = namedtuple("tup_az_el", "az el")
@@ -44,6 +45,7 @@ EPS = 0.01
 # (+X "cross" +Y points in +Z direction, so +Y points down into floor)
 y_ab = -10.
 y_cd = -8.
+y_offs = -2.
 
 # "fixed" landmarks
 mark1 = {"A": pu.Landmark([0., y_ab, 0.], 0., 270.),
@@ -71,6 +73,14 @@ mark3 = {"A": pu.Landmark([0., y_ab, 2.]),
          "E": pu.Landmark([12., y_cd, 9.]),
          "F": pu.Landmark([13., y_cd + 1., 5.])}
 
+# landmarks that appear below fixed landmarks
+markb = {"A": pu.Landmark([0., y_ab - y_offs, 0.], 0., 270.),
+         "B": pu.Landmark([0., y_ab - y_offs, 16.], -270.0, 0.),
+         "C": pu.Landmark([8., y_ab + 1.6 - y_offs, 16.], -180., 45.),
+         "D": pu.Landmark([13., y_cd - y_offs, 0.], -90., 180.),
+         "E": pu.Landmark([10., y_cd - y_offs, 9.], -90., 0.),
+         "F": pu.Landmark([13., y_cd - y_offs, 6.], -90., 90.)}
+
 # azimuth and elevation of camera so that landmarks
 # are visible from (1, 1) at height -3
 lm_vis_1_1 = {"A": tup_az_el(225., 70.),
@@ -90,6 +100,51 @@ lm_vis_7_6 = {"A": tup_az_el(225., 30.),
               "F": tup_az_el(90., 60.)}
 
 
+def pnp_test(key, xyz, angs):
+
+    cam = pu.CameraHelper()
+
+    _x, _y, _z = xyz
+    _azi, _ele = angs
+
+    cam_xyz = np.float32([_x, _y, _z])
+
+    # world landmark positions
+    xyz1_o = mark1[key].xyz
+    xyz2_o = mark2[key].xyz
+    xyz3_o = mark3[key].xyz
+    xyzb_o = markb[key].xyz
+
+    # rotate and offset landmark positions as camera will see them
+    xyz1_rot = pu.calc_xyz_after_rotation_deg(xyz1_o - cam_xyz, _ele, _azi, 0)
+    xyz2_rot = pu.calc_xyz_after_rotation_deg(xyz2_o - cam_xyz, _ele, _azi, 0)
+    xyz3_rot = pu.calc_xyz_after_rotation_deg(xyz3_o - cam_xyz, _ele, _azi, 0)
+    xyzb_rot = pu.calc_xyz_after_rotation_deg(xyzb_o - cam_xyz, _ele, _azi, 0)
+
+    # project them to camera plane
+    uv1 = cam.project_xyz_to_uv(xyz1_rot)
+    uv2 = cam.project_xyz_to_uv(xyz2_rot)
+    uv3 = cam.project_xyz_to_uv(xyz3_rot)
+    uvb = cam.project_xyz_to_uv(xyzb_rot)
+
+    if cam.is_visible(uv1) and cam.is_visible(uv2) and cam.is_visible(uv3) and cam.is_visible(uvb):
+
+        objectPoints = np.array([xyz1_o, xyz2_o, xyz3_o, xyzb_o])
+        imagePoints = np.array([uv1, uv2, uv3, uvb])
+
+        rvecR, tvecR, inliers = cv2.solvePnPRansac(objectPoints, imagePoints, cam.camA, cam.distCoeff)
+        if inliers is not None:
+            newImagePoints, _ = cv2.projectPoints(objectPoints, rvecR, tvecR, cam.camA, cam.distCoeff)
+            # print newImagePoints
+            rotM, _ = cv2.Rodrigues(rvecR)
+            q = -np.matrix(rotM).T * np.matrix(tvecR)
+            print q
+        else:
+            print "*** PnP failed ***"
+    else:
+        print "a PnP coord is not visible"
+
+
 def landmark_test(lm1, lm2,  xyz, angs):
 
     cam = pu.CameraHelper()
@@ -106,19 +161,19 @@ def landmark_test(lm1, lm2,  xyz, angs):
     # determine pixel location of fixed LM
     xyz1 = lm1.xyz - cam_xyz
     xyz1_rot = pu.calc_xyz_after_rotation_deg(xyz1, _ele, _azi, 0)
-    u1, v1 = cam.project_xyz_to_uv(xyz1_rot)
+    uv1 = cam.project_xyz_to_uv(xyz1_rot)
 
     # determine pixel location of left/right LM
     xyz2 = lm2.xyz - cam_xyz
     xyz2_rot = pu.calc_xyz_after_rotation_deg(xyz2, _ele, _azi, 0)
-    u2, v2 = cam.project_xyz_to_uv(xyz2_rot)
+    uv2 = cam.project_xyz_to_uv(xyz2_rot)
 
-    if cam.is_visible(u1, v1) and cam.is_visible(u2, v2):
+    if cam.is_visible(uv1) and cam.is_visible(uv2):
         pass
     else:
         print
-        print "Image Landmark #1:", (u1, v1)
-        print "Image Landmark #2:", (u2, v2)
+        print "Image Landmark #1:", uv1
+        print "Image Landmark #2:", uv2
         print "At least one landmark is NOT visible!"
         return False, 0., 0., 0.
 
@@ -129,8 +184,8 @@ def landmark_test(lm1, lm2,  xyz, angs):
     cam.elev = _ele * pu.DEG2RAD
     cam.world_y = _y
 
-    lm1.set_current_uv((u1, v1))
-    lm2.set_current_uv((u2, v2))
+    lm1.set_current_uv(uv1)
+    lm2.set_current_uv(uv2)
     world_x, world_z, world_azim = cam.triangulate_landmarks(lm1, lm2)
 
     # this integer coordinate stuff is disabled for now...

@@ -79,7 +79,7 @@ class Landmark(object):
         self.ang_u1max = ang_u1max
         self.ang_u1min = ang_u1min
         self.name = name
-        self.uv = (0., 0.)
+        self.uv = np.array([0., 0.])
 
     def set_current_uv(self, uv):
         """
@@ -167,6 +167,7 @@ class CameraHelper(object):
         # these must be updated prior to triangulation
         self.world_y = 0.
         self.elev = 0.
+
         # arbitrary test params
         self.w = 640
         self.h = 480
@@ -174,21 +175,23 @@ class CameraHelper(object):
         self.cy = 240
         self.fx = 554  # 60 deg hfov (30.0)
         self.fy = 554  # 46 deg vfov (23.0)
+
+        self.distCoeff = None
         self.camA = np.float32([[self.fx, 0., self.cx],
                                 [0., self.fy, self.cy],
                                 [0., 0., 1.]])
 
-    def is_visible(self, u, v):
+    def is_visible(self, uv):
         """
         Test if pixel at (u, v) is within valid range.
-        :param u: Pixel horizontal coordinate.
-        :param v: Pixel vertical coordinate.
+        :param uv: Numpy array with (u, v) pixel coordinates.
         :return: True if pixel is within image, False otherwise.
         """
+        assert(isinstance(uv, np.ndarray))
         result = True
-        if int(u) < 0 or int(u) >= self.w:
+        if int(uv[0]) < 0 or int(uv[0]) >= self.w:
             result = False
-        if int(v) < 0 or int(v) >= self.h:
+        if int(uv[1]) < 0 or int(uv[1]) >= self.h:
             result = False
         return result
 
@@ -196,36 +199,38 @@ class CameraHelper(object):
         """
         Project 3D world point to image plane.
         :param xyz: real world point, shape = (3,)
+        :return: Numpy array with (u, v) pixel coordinates.
         """
+        assert(isinstance(xyz, np.ndarray))
         pixel_u = self.fx * (xyz[0] / xyz[2]) + self.cx
         pixel_v = self.fy * (xyz[1] / xyz[2]) + self.cy
-        return pixel_u, pixel_v
+        return np.array([pixel_u, pixel_v])
 
-    def calc_azim_elev(self, u, v):
+    def calc_azim_elev(self, uv):
         """
         Calculate azimuth (radians) and elevation (radians) to image point.
-        :param u: horizontal pixel coordinate
-        :param v: vertical pixel coordinate
+        :param uv: Numpy array with (u, v) pixel coordinates.
         :return: Tuple with azimuth and elevation
         """
-        ang_azimuth = math.atan((u - self.cx) / self.fx)
+        assert(isinstance(uv, np.ndarray))
+        ang_azimuth = math.atan((uv[0] - self.cx) / self.fx)
         # need negation here so elevation matches convention listed above
-        ang_elevation = math.atan((self.cy - v) / self.fy)
+        ang_elevation = math.atan((self.cy - uv[1]) / self.fy)
         return ang_azimuth, ang_elevation
 
-    def calc_rel_xyz_to_pixel(self, known_y, u, v, cam_elev):
+    def calc_rel_xyz_to_pixel(self, known_y, uv, cam_elev):
         """Calculate camera-relative X,Y,Z vector to known landmark in image.
         :param known_y: landmark world Y coord.
-        :param u: landmark horiz. pixel coord.
-        :param v: landmark vert. pixel coord.
+        :param uv: Numpy array with Landmark (u, v) pixel coordinates.
         :param cam_elev: camera elevation (radians)
         :return: numpy array [X, Y, Z], shape=(3,)
         """
+        assert(isinstance(uv, np.ndarray))
         # use camera params to convert (u, v) to ray
         # u, v might be integers so convert to floats
         # Z coordinate is 1
-        ray_x = (float(u) - self.cx) / self.fx
-        ray_y = (float(v) - self.cy) / self.fy
+        ray_x = (float(uv[0]) - self.cx) / self.fx
+        ray_y = (float(uv[1]) - self.cy) / self.fy
         ray_cam = np.array([[ray_x], [ray_y], [1.]])
 
         # rotate ray to undo known camera elevation
@@ -246,8 +251,8 @@ class CameraHelper(object):
         from triangulation into world coordinates based
         on fixed landmark's known orientation in world.
 
-        :param lm_fix: Fixed Landmark #1 with known orientation in world.
-        :param lm_var: Variable Landmark #2 (orientation may not be known).
+        :param lm_fix: Fixed Landmark (#1), known orientation in world.
+        :param lm_var: Variable Landmark (#2), orientation may not be known.
         :return: angle, ground range to Landmark 1, world azim for camera
         """
         assert(isinstance(lm_fix, Landmark))
@@ -256,13 +261,11 @@ class CameraHelper(object):
         # landmarks can be at different heights
         known_y1 = lm_fix.xyz[1] - self.world_y
         known_y2 = lm_var.xyz[1] - self.world_y
-        u1, v1 = lm_fix.uv
-        u2, v2 = lm_var.uv
 
         # find relative vector to landmark 1
         # absolute location of this landmark should be known
         # then calculate ground range
-        xyz1 = self.calc_rel_xyz_to_pixel(known_y1, u1, v1, self.elev)
+        xyz1 = self.calc_rel_xyz_to_pixel(known_y1, lm_fix.uv, self.elev)
         x1, _, z1 = xyz1
         r1 = math.sqrt(x1 * x1 + z1 * z1)
 
@@ -272,7 +275,7 @@ class CameraHelper(object):
         # find relative vector to landmark 2
         # this landmark could be point along an edge at unknown position
         # then calculate ground range
-        xyz2 = self.calc_rel_xyz_to_pixel(known_y2, u2, v2, self.elev)
+        xyz2 = self.calc_rel_xyz_to_pixel(known_y2, lm_var.uv, self.elev)
         x2, _, z2 = xyz2
         r2 = math.sqrt(x2 * x2 + z2 * z2)
 
@@ -289,6 +292,7 @@ class CameraHelper(object):
 
         # landmark has angle offset info
         # which is used to calculate world coords and azim
+        u2 = lm_var.uv[0]
         world_azim = lm_fix.calc_world_azim(u2, angle, rel_azim)
         x, z = lm_fix.calc_world_xz(u2, angle, r1)
         return x, z, world_azim
